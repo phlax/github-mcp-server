@@ -201,6 +201,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	ghServer, err := h.githubMcpServerFactory(r, h.deps, invToUse, &github.MCPServerConfig{
 		Version:           h.config.Version,
+		TerseDescriptions: h.config.TerseDescriptions,
 		Translator:        h.t,
 		ContentWindowSize: h.config.ContentWindowSize,
 		Logger:            h.logger,
@@ -265,6 +266,7 @@ func DefaultInventoryFactory(cfg *ServerConfig, t translations.TranslationHelper
 			SetResources(staticResources).
 			SetPrompts(staticPrompts).
 			WithDeprecatedAliases(github.DeprecatedToolAliases).
+			WithTerseDescriptions(cfg.TerseDescriptions).
 			WithFeatureChecker(featureChecker)
 
 		// When static flags constrain the universe, default to showing
@@ -337,6 +339,7 @@ func buildStaticInventory(cfg *ServerConfig, t translations.TranslationHelperFun
 	}
 
 	b := github.NewInventory(t).
+		WithTerseDescriptions(cfg.TerseDescriptions).
 		WithReadOnly(cfg.ReadOnly).
 		WithToolsets(github.ResolvedEnabledToolsets(cfg.EnabledToolsets, cfg.EnabledTools))
 

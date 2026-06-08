@@ -68,6 +68,9 @@ type MCPServerConfig struct {
 	// This is used for PAT scope filtering where we can't issue scope challenges.
 	TokenScopes []string
 
+	// TerseDescriptions shortens tool descriptions in tools/list responses.
+	TerseDescriptions bool
+
 	// Additional server options to apply
 	ServerOptions []MCPServerOption
 }
@@ -92,6 +95,7 @@ func NewMCPServer(ctx context.Context, cfg *MCPServerConfig, deps ToolDependenci
 	// Add middlewares. Order matters - for example, the error context middleware should be applied last so that it runs FIRST (closest to the handler) to ensure all errors are captured,
 	// and any middleware that needs to read or modify the context should be before it.
 	ghServer.AddReceivingMiddleware(middleware...)
+	ghServer.AddReceivingMiddleware(InjectInventoryMiddleware(inv))
 	ghServer.AddReceivingMiddleware(InjectDepsMiddleware(deps))
 	ghServer.AddReceivingMiddleware(addGitHubAPIErrorToContext)
 

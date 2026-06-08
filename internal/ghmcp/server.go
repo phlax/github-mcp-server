@@ -151,6 +151,7 @@ func NewStdioMCPServer(ctx context.Context, cfg github.MCPServerConfig) (*mcp.Se
 	// Build and register the tool/resource/prompt inventory
 	inventoryBuilder := github.NewInventory(cfg.Translator).
 		WithDeprecatedAliases(github.DeprecatedToolAliases).
+		WithTerseDescriptions(cfg.TerseDescriptions).
 		WithReadOnly(cfg.ReadOnly).
 		WithToolsets(github.ResolvedEnabledToolsets(cfg.EnabledToolsets, cfg.EnabledTools)).
 		WithTools(github.CleanTools(cfg.EnabledTools)).
@@ -202,6 +203,9 @@ type StdioServerConfig struct {
 
 	// ReadOnly indicates if we should only register read-only tools
 	ReadOnly bool
+
+	// TerseDescriptions indicates if tool descriptions should be shortened.
+	TerseDescriptions bool
 
 	// ExportTranslations indicates if we should export translations
 	// See: https://github.com/github/github-mcp-server?tab=readme-ov-file#i18n--overriding-descriptions
@@ -279,6 +283,7 @@ func RunStdioServer(cfg StdioServerConfig) error {
 		EnabledTools:      cfg.EnabledTools,
 		EnabledFeatures:   cfg.EnabledFeatures,
 		ReadOnly:          cfg.ReadOnly,
+		TerseDescriptions: cfg.TerseDescriptions,
 		Translator:        t,
 		ContentWindowSize: cfg.ContentWindowSize,
 		LockdownMode:      cfg.LockdownMode,

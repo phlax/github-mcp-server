@@ -60,6 +60,10 @@ type Inventory struct {
 	unrecognizedToolsets []string
 	// server instructions hold high-level instructions for agents to use the server effectively
 	instructions string
+	// toolVerboseInfo stores original verbose tool and parameter descriptions captured at build time.
+	toolVerboseInfo map[string]ToolVerboseInfo
+	// terseDescriptions controls whether registration output uses shortened descriptions.
+	terseDescriptions bool
 }
 
 // UnrecognizedToolsets returns toolset IDs that were passed to WithToolsets but don't
@@ -114,6 +118,8 @@ func (r *Inventory) ForMCPRequest(method string, itemName string) *Inventory {
 		featureChecker:       r.featureChecker,
 		filters:              r.filters, // shared, not modified
 		unrecognizedToolsets: r.unrecognizedToolsets,
+		toolVerboseInfo:      r.toolVerboseInfo,
+		terseDescriptions:    r.terseDescriptions,
 	}
 
 	// Helper to clear all item types
@@ -186,6 +192,9 @@ func (r *Inventory) ToolsForRegistration(ctx context.Context) []ServerTool {
 	tools := r.AvailableTools(ctx)
 	if shouldStripMCPAppsMetadata(ctx, r.checkFeatureFlag(ctx, mcpAppsFeatureFlag)) {
 		tools = stripMCPAppsMetadata(tools)
+	}
+	if r.terseDescriptions {
+		tools = terseTools(tools)
 	}
 	return tools
 }
@@ -363,4 +372,10 @@ func (r *Inventory) EnabledToolsets() []ToolsetMetadata {
 
 func (r *Inventory) Instructions() string {
 	return r.instructions
+}
+
+// ToolVerboseInfo returns the captured original verbose info for a tool name.
+func (r *Inventory) ToolVerboseInfo(toolName string) (ToolVerboseInfo, bool) {
+	info, ok := r.toolVerboseInfo[toolName]
+	return info, ok
 }

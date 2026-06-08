@@ -53,6 +53,7 @@ type Builder struct {
 	featureChecker       FeatureFlagChecker
 	filters              []ToolFilter // filters to apply to all tools
 	generateInstructions bool
+	terseDescriptions    bool
 }
 
 // NewBuilder creates a new Builder.
@@ -97,6 +98,13 @@ func (b *Builder) WithReadOnly(readOnly bool) *Builder {
 
 func (b *Builder) WithServerInstructions() *Builder {
 	b.generateInstructions = true
+	return b
+}
+
+// WithTerseDescriptions enables terse tool and parameter descriptions for
+// registration output.
+func (b *Builder) WithTerseDescriptions(enabled bool) *Builder {
+	b.terseDescriptions = enabled
 	return b
 }
 
@@ -211,6 +219,7 @@ func cleanTools(tools []string) []string {
 // This ensures invalid tool configurations fail fast at build time.
 func (b *Builder) Build() (*Inventory, error) {
 	tools := b.tools
+	toolVerboseInfo := captureToolVerboseInfo(tools)
 
 	// Install the feature-flag filter at the head of the pipeline so that
 	// flag-gated tools are excluded before any user-supplied WithFilter sees
@@ -230,6 +239,8 @@ func (b *Builder) Build() (*Inventory, error) {
 		readOnly:          b.readOnly,
 		featureChecker:    b.featureChecker,
 		filters:           filters,
+		toolVerboseInfo:   toolVerboseInfo,
+		terseDescriptions: b.terseDescriptions,
 	}
 
 	// Process toolsets and pre-compute metadata in a single pass
@@ -291,7 +302,7 @@ func (b *Builder) processToolsets() (map[ToolsetID]bool, []string, []ToolsetID, 
 	for i := range b.tools {
 		t := &b.tools[i]
 		validIDs[t.Toolset.ID] = true
-		if t.Toolset.Default {
+		if t.Toolset.Default && t.Toolset.ID != AlwaysEnabledToolsetID {
 			defaultIDs[t.Toolset.ID] = true
 		}
 		if t.Toolset.Description != "" {

@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	ghcontext "github.com/github/github-mcp-server/pkg/context"
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 )
@@ -2273,4 +2275,100 @@ func TestShouldStripMCPAppsMetadata(t *testing.T) {
 			require.Equal(t, tc.want, got)
 		})
 	}
+}
+
+func TestToolsForRegistration_TerseDescriptions(t *testing.T) {
+	tools := []ServerTool{
+		NewServerTool(
+			mcp.Tool{
+				Name:        "gh_tool_help",
+				Description: "Returns the full verbose description and parameter docs for a specific GitHub MCP tool.",
+				InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
+				Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+			},
+			ToolsetMetadata{ID: AlwaysEnabledToolsetID},
+			func(_ context.Context, _ *mcp.CallToolRequest) (*mcp.CallToolResult, error) { return nil, nil },
+		),
+		NewServerTool(
+			mcp.Tool{
+				Name:        "issue_read",
+				Description: "Get issue details and related entities from GitHub. Supports multiple read operations.",
+				Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+				InputSchema: &jsonschema.Schema{
+					Type:     "object",
+					Required: []string{"owner"},
+					Properties: map[string]*jsonschema.Schema{
+						"owner": {
+							Type:        "string",
+							Description: "The owner of the repository. Can be either a user or organization account.",
+						},
+					},
+				},
+			},
+			ToolsetMetadata{ID: "issues"},
+			func(_ context.Context, _ *mcp.CallToolRequest) (*mcp.CallToolResult, error) { return nil, nil },
+		),
+	}
+
+	terse := mustBuild(t, NewBuilder().SetTools(tools).WithToolsets([]string{"issues"}).WithTerseDescriptions(true))
+	got := terse.ToolsForRegistration(context.Background())
+	require.Len(t, got, 2)
+
+	for _, tool := range got {
+		require.LessOrEqual(t, len(tool.Tool.Description), 160)
+	}
+
+	var helpFound bool
+	for _, tool := range got {
+		if tool.Tool.Name == "gh_tool_help" {
+			helpFound = true
+			require.LessOrEqual(t, len(tool.Tool.Description), 160)
+			continue
+		}
+		schema, ok := tool.Tool.InputSchema.(*jsonschema.Schema)
+		require.True(t, ok)
+		require.NotNil(t, schema.Properties["owner"])
+		require.LessOrEqual(t, len(schema.Properties["owner"].Description), 80)
+	}
+	require.True(t, helpFound, "gh_tool_help should always be present")
+
+	info, ok := terse.ToolVerboseInfo("issue_read")
+	require.True(t, ok)
+	require.True(t, strings.Contains(info.Description, "Supports multiple read operations"))
+	require.NotEmpty(t, info.Parameters)
+	require.True(t, strings.Contains(info.Parameters[0].Description, "organization account"))
+}
+
+func TestToolsForRegistration_TerseDoesNotMutateOriginals(t *testing.T) {
+	tools := []ServerTool{
+		NewServerTool(
+			mcp.Tool{
+				Name:        "issue_read",
+				Description: "Get issue details and related entities from GitHub. Supports multiple read operations.",
+				Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+				InputSchema: &jsonschema.Schema{
+					Type: "object",
+					Properties: map[string]*jsonschema.Schema{
+						"owner": {
+							Type:        "string",
+							Description: "The owner of the repository. Can be either a user or organization account.",
+						},
+					},
+				},
+			},
+			ToolsetMetadata{ID: "issues"},
+			func(_ context.Context, _ *mcp.CallToolRequest) (*mcp.CallToolResult, error) { return nil, nil },
+		),
+	}
+
+	terse := mustBuild(t, NewBuilder().SetTools(tools).WithToolsets([]string{"all"}).WithTerseDescriptions(true))
+	_ = terse.ToolsForRegistration(context.Background())
+
+	nonTerse := mustBuild(t, NewBuilder().SetTools(tools).WithToolsets([]string{"all"}))
+	got := nonTerse.ToolsForRegistration(context.Background())
+	require.Len(t, got, 1)
+	require.Equal(t, tools[0].Tool.Description, got[0].Tool.Description)
+	schema, ok := got[0].Tool.InputSchema.(*jsonschema.Schema)
+	require.True(t, ok)
+	require.Equal(t, tools[0].Tool.InputSchema.(*jsonschema.Schema).Properties["owner"].Description, schema.Properties["owner"].Description)
 }

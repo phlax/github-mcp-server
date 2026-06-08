@@ -35,6 +35,12 @@ var (
 		Icon:             "person",
 		InstructionsFunc: generateContextToolsetInstructions,
 	}
+	ToolsetMetadataMeta = inventory.ToolsetMetadata{
+		ID:          inventory.AlwaysEnabledToolsetID,
+		Description: "Metadata and discovery tools",
+		Default:     true,
+		Icon:        "tools",
+	}
 	ToolsetMetadataRepos = inventory.ToolsetMetadata{
 		ID:          "repos",
 		Description: "GitHub Repository related tools",
@@ -172,6 +178,7 @@ func AllTools(t translations.TranslationHelperFunc) []inventory.ServerTool {
 		GetMe(t),
 		GetTeams(t),
 		GetTeamMembers(t),
+		ToolHelp(t),
 
 		// Repository tools
 		SearchRepositories(t),
