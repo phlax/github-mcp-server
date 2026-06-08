@@ -457,6 +457,27 @@ You can also configure specific tools using the `--tools` flag. Tools can be use
 - Tool names must match exactly (e.g., `get_file_contents`, not `getFileContents`). Invalid tool names will cause the server to fail at startup with an error message
 - When tools are renamed, old names are preserved as aliases for backward compatibility. See [Tool Renaming](docs/tool-renaming.md) for details.
 
+### Reducing tool description size for small models
+
+When running smaller local models, you can reduce `tools/list` payload size with:
+
+```bash
+./github-mcp-server stdio --terse-descriptions
+```
+
+or:
+
+```bash
+GITHUB_TERSE_DESCRIPTIONS=true ./github-mcp-server stdio
+```
+
+With terse descriptions enabled, tool descriptions are shortened to one-line synopses. Use the built-in `gh_tool_help` tool to fetch full verbose docs and parameter descriptions on demand for a specific tool.
+
+This progressive-disclosure approach helps reduce prompt bloat for resource-constrained models, as discussed in:
+
+- RAG-MCP (arXiv:2505.03275)
+- Anthropic's "Code execution with MCP" engineering post
+
 ### Using Toolsets With Docker
 
 When using Docker, you can pass the toolsets as environment variables:

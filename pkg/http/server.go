@@ -78,6 +78,9 @@ type ServerConfig struct {
 	// cannot re-enable write tools.
 	ReadOnly bool
 
+	// TerseDescriptions indicates if tool descriptions should be shortened.
+	TerseDescriptions bool
+
 	// EnabledToolsets is a list of toolsets to enable.
 	// When set via CLI flag, per-request headers can only narrow within these toolsets.
 	EnabledToolsets []string
