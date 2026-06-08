@@ -45,7 +45,7 @@ func captureToolVerboseInfo(tools []ServerTool) map[string]ToolVerboseInfo {
 					Type:        schemaType(prop),
 					Required:    isRequired,
 					Description: prop.Description,
-					Enum:        slices.Clone(prop.Enum),
+					Enum:        prop.Enum,
 				})
 			}
 			slices.SortFunc(info.Parameters, func(a, b ParamInfo) int {

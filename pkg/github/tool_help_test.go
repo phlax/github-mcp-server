@@ -27,7 +27,7 @@ func TestToolHelpKnownToolReturnsVerboseInfo(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(getTextResult(t, result).Text), &info))
 	require.Equal(t, "issue_read", info.Name)
 	require.NotEmpty(t, info.Description)
-	require.True(t, strings.Contains(strings.ToLower(info.Description), "issue"))
+	require.Contains(t, strings.ToLower(info.Description), "issue")
 	require.NotEmpty(t, info.Parameters)
 
 	var foundMethod bool

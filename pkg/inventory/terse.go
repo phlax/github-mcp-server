@@ -45,7 +45,7 @@ func terseInputSchema(schema any) any {
 func shortenToolDescription(s string) string {
 	short := firstSentence(s, 120)
 	if short == "" {
-		return strings.TrimSpace(terseDescriptionHint)
+		return ""
 	}
 	return short + terseDescriptionHint
 }
@@ -72,7 +72,7 @@ func firstSentence(s string, capLimit int) string {
 	}
 	for i := 0; i+1 < len(runes); i++ {
 		if runes[i] == '.' && runes[i+1] == ' ' {
-			end = min(end, i+1)
+			end = min(end, i)
 			break
 		}
 	}

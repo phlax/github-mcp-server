@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"testing"
 
 	ghcontext "github.com/github/github-mcp-server/pkg/context"
@@ -2334,9 +2333,9 @@ func TestToolsForRegistration_TerseDescriptions(t *testing.T) {
 
 	info, ok := terse.ToolVerboseInfo("issue_read")
 	require.True(t, ok)
-	require.True(t, strings.Contains(info.Description, "Supports multiple read operations"))
+	require.Contains(t, info.Description, "Supports multiple read operations")
 	require.NotEmpty(t, info.Parameters)
-	require.True(t, strings.Contains(info.Parameters[0].Description, "organization account"))
+	require.Contains(t, info.Parameters[0].Description, "organization account")
 }
 
 func TestToolsForRegistration_TerseDoesNotMutateOriginals(t *testing.T) {

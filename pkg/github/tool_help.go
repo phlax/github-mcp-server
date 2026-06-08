@@ -62,7 +62,7 @@ func ToolHelp(t translations.TranslationHelperFunc) inventory.ServerTool {
 			return MarshalledTextResult(toolHelpResponse{
 				Name:        info.Name,
 				Description: info.Description,
-				Parameters:  slices.Clone(info.Parameters),
+				Parameters:  info.Parameters,
 			}), nil, nil
 		},
 	)

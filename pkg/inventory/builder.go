@@ -302,6 +302,8 @@ func (b *Builder) processToolsets() (map[ToolsetID]bool, []string, []ToolsetID, 
 	for i := range b.tools {
 		t := &b.tools[i]
 		validIDs[t.Toolset.ID] = true
+		// Meta toolset entries are always enabled by ID and should not appear in
+		// the user-facing "default" expansion list.
 		if t.Toolset.Default && t.Toolset.ID != AlwaysEnabledToolsetID {
 			defaultIDs[t.Toolset.ID] = true
 		}

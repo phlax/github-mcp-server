@@ -95,6 +95,9 @@ func NewMCPServer(ctx context.Context, cfg *MCPServerConfig, deps ToolDependenci
 	// Add middlewares. Order matters - for example, the error context middleware should be applied last so that it runs FIRST (closest to the handler) to ensure all errors are captured,
 	// and any middleware that needs to read or modify the context should be before it.
 	ghServer.AddReceivingMiddleware(middleware...)
+	// Inject inventory and dependencies for tool handlers.
+	// Middleware executes in reverse registration order, so handlers see this
+	// context before executing.
 	ghServer.AddReceivingMiddleware(InjectInventoryMiddleware(inv))
 	ghServer.AddReceivingMiddleware(InjectDepsMiddleware(deps))
 	ghServer.AddReceivingMiddleware(addGitHubAPIErrorToContext)
