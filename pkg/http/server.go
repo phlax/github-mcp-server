@@ -185,6 +185,7 @@ func RunHTTPServer(cfg ServerConfig) error {
 		handler.RegisterRoutes(r)
 	})
 	logger.Info("MCP endpoints registered", "baseURL", cfg.BaseURL)
+	logger.Info("HTTP middleware logging enabled at INFO level — auth seam decisions will be visible")
 
 	r.Group(func(r chi.Router) {
 		// Register OAuth protected resource metadata endpoints
