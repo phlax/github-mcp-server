@@ -180,6 +180,9 @@ func withInsiders(next http.Handler) http.Handler {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Log every request that reaches the handler so requests that bypass or
+	// reach here before auth middleware (e.g. due to routing changes) are
+	// still visible in the operator's journal.
 	h.logger.Info("http_request",
 		"method", r.Method,
 		"path", r.URL.Path,
