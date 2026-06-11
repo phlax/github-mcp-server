@@ -214,6 +214,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		TerseDescriptions: h.config.TerseDescriptions,
 		Translator:        h.t,
 		ContentWindowSize: h.config.ContentWindowSize,
+		SpillConfig:       h.config.SpillConfig,
 		Logger:            h.logger,
 		RepoAccessTTL:     h.config.RepoAccessCacheTTL,
 		// Explicitly set empty capabilities. inv.ForMCPRequest currently returns nothing for Initialize.

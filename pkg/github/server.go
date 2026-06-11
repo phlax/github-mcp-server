@@ -47,6 +47,9 @@ type MCPServerConfig struct {
 	// Content window size
 	ContentWindowSize int
 
+	// SpillConfig controls optional spilling of oversized tool results to disk.
+	SpillConfig utils.SpillConfig
+
 	// LockdownMode indicates if we should enable lockdown mode
 	LockdownMode bool
 

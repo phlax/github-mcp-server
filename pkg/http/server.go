@@ -63,6 +63,9 @@ type ServerConfig struct {
 	// Content window size
 	ContentWindowSize int
 
+	// SpillConfig controls optional spilling of oversized tool results to disk.
+	SpillConfig utils.SpillConfig
+
 	// LockdownMode indicates if we should enable lockdown mode
 	LockdownMode bool
 
@@ -121,6 +124,7 @@ func RunHTTPServer(cfg ServerConfig) error {
 	}
 	logger := slog.New(slogHandler)
 	logger.Info("starting server", "version", cfg.Version, "host", cfg.Host, "lockdownEnabled", cfg.LockdownMode, "readOnly", cfg.ReadOnly, "insidersMode", cfg.InsidersMode)
+	utils.SetSpillConfig(cfg.SpillConfig)
 
 	apiHost, err := utils.NewAPIHost(cfg.Host)
 	if err != nil {

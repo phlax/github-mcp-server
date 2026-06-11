@@ -478,6 +478,26 @@ This progressive-disclosure approach helps reduce prompt bloat for resource-cons
 - RAG-MCP (arXiv:2505.03275)
 - Anthropic's "Code execution with MCP" engineering post
 
+### Spilling oversized tool results to a shared directory
+
+When an agent runs inside a sandbox or container, downstream tooling may spill oversized tool responses to a host-only temporary directory that the agent cannot read. To avoid that, you can opt in to server-side spilling and point the server at a directory that is deliberately shared with the agent.
+
+```bash
+./github-mcp-server stdio --spill-dir /workspace/tmp
+```
+
+or:
+
+```bash
+GITHUB_SPILL_DIR=/workspace/tmp \
+GITHUB_SPILL_BYTES=32768 \
+GITHUB_SPILL_HEAD_BYTES=2048 \
+GITHUB_SPILL_TAIL_BYTES=512 \
+./github-mcp-server stdio
+```
+
+When enabled, responses larger than `spill-bytes` are written to the configured directory and the tool returns a small JSON envelope with the absolute `path`, response `bytes`, `mime_hint`, preview `head` and `tail`, and a `hint` telling the agent to read the file with filesystem tools.
+
 ### Using Toolsets With Docker
 
 When using Docker, you can pass the toolsets as environment variables:
