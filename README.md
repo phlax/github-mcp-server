@@ -486,6 +486,14 @@ When an agent runs inside a sandbox or container, downstream tooling may spill o
 ./github-mcp-server stdio --spill-dir /workspace/tmp
 ```
 
+For local dev outside a sandbox, prefer a tmpfs that's tied to your session:
+
+```bash
+./github-mcp-server stdio --spill-dir "${XDG_RUNTIME_DIR:-/tmp}/github-mcp-spill"
+```
+
+> **Note:** spilling is only useful when the directory you point us at is reachable by the agent that will read the envelope. In a containerized / sandboxed setup, pick a path that's bind-mounted into the agent's filesystem; on a single host, any writable path that both processes can see is fine.
+
 or:
 
 ```bash

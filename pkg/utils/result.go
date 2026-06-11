@@ -11,7 +11,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -46,8 +45,11 @@ var (
 	spillConfig   SpillConfig
 )
 
-// SetSpillConfig updates the process-global oversized response spill configuration.
-// It is intended to be called during server startup before requests are served; reads are safe after initialization.
+// SetSpillConfig updates the process-global oversized response spill
+// configuration. It is intended to be called exactly once during server
+// startup before requests are served. Calls after startup are race-safe
+// but will affect all in-flight tool calls server-wide — there is no
+// per-request override path.
 func SetSpillConfig(cfg SpillConfig) {
 	spillConfigMu.Lock()
 	defer spillConfigMu.Unlock()
@@ -119,7 +121,7 @@ func spillToolResult(message string, meta ResultMeta, cfg SpillConfig) (*mcp.Cal
 		toolName = "tool-result"
 	}
 
-	filename, err := generateSpillFilename(toolName, ext)
+	filename, err := generateSpillFilename(ext)
 	if err != nil {
 		return nil, fmt.Errorf("generate spill filename: %w", err)
 	}
@@ -147,34 +149,15 @@ func spillToolResult(message string, meta ResultMeta, cfg SpillConfig) (*mcp.Cal
 	return newInlineToolResultText(string(envelopeBody)), nil
 }
 
-func generateSpillFilename(tool, ext string) (string, error) {
-	// Four random bytes are sufficient here because the filename also carries
-	// the tool name and millisecond timestamp, keeping collision risk negligible.
+func generateSpillFilename(ext string) (string, error) {
+	// Four random bytes give negligible collision risk when combined with
+	// the millisecond timestamp.
 	var suffix [4]byte
 	if _, err := rand.Read(suffix[:]); err != nil {
 		return "", err
 	}
 
-	return fmt.Sprintf("%s-%d-%s%s", sanitizeSpillToolName(tool), time.Now().UnixMilli(), hex.EncodeToString(suffix[:]), ext), nil
-}
-
-func sanitizeSpillToolName(tool string) string {
-	if tool == "" {
-		return "tool-result"
-	}
-
-	safe := strings.Map(func(r rune) rune {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_' {
-			return r
-		}
-
-		return '-'
-	}, tool)
-	if safe == "" || strings.Trim(safe, "-_") == "" {
-		return "tool-result"
-	}
-
-	return safe
+	return fmt.Sprintf("spill-%d-%s%s", time.Now().UnixMilli(), hex.EncodeToString(suffix[:]), ext), nil
 }
 
 func previewHead(body []byte, n int) string {

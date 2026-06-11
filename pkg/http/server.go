@@ -64,6 +64,8 @@ type ServerConfig struct {
 	ContentWindowSize int
 
 	// SpillConfig controls optional spilling of oversized tool results to disk.
+	// This config is applied process-globally via utils.SetSpillConfig during
+	// server startup; per-request overrides are not supported.
 	SpillConfig utils.SpillConfig
 
 	// LockdownMode indicates if we should enable lockdown mode
