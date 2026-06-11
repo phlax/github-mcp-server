@@ -151,6 +151,7 @@ func NewStdioMCPServer(ctx context.Context, cfg github.MCPServerConfig) (*mcp.Se
 	// Build and register the tool/resource/prompt inventory
 	inventoryBuilder := github.NewInventory(cfg.Translator).
 		WithDeprecatedAliases(github.DeprecatedToolAliases).
+		WithTerseDescriptions(cfg.TerseDescriptions).
 		WithReadOnly(cfg.ReadOnly).
 		WithToolsets(github.ResolvedEnabledToolsets(cfg.EnabledToolsets, cfg.EnabledTools)).
 		WithTools(github.CleanTools(cfg.EnabledTools)).
@@ -203,6 +204,9 @@ type StdioServerConfig struct {
 	// ReadOnly indicates if we should only register read-only tools
 	ReadOnly bool
 
+	// TerseDescriptions indicates if tool descriptions should be shortened.
+	TerseDescriptions bool
+
 	// ExportTranslations indicates if we should export translations
 	// See: https://github.com/github/github-mcp-server?tab=readme-ov-file#i18n--overriding-descriptions
 	ExportTranslations bool
@@ -215,6 +219,11 @@ type StdioServerConfig struct {
 
 	// Content window size
 	ContentWindowSize int
+
+	// SpillConfig controls optional spilling of oversized tool results to disk.
+	// This config is applied process-globally via utils.SetSpillConfig during
+	// server startup; per-request overrides are not supported.
+	SpillConfig utils.SpillConfig
 
 	// LockdownMode indicates if we should enable lockdown mode
 	LockdownMode bool
@@ -254,6 +263,7 @@ func RunStdioServer(cfg StdioServerConfig) error {
 	}
 	logger := slog.New(slogHandler)
 	logger.Info("starting server", "version", cfg.Version, "host", cfg.Host, "readOnly", cfg.ReadOnly, "lockdownEnabled", cfg.LockdownMode)
+	utils.SetSpillConfig(cfg.SpillConfig)
 
 	// Fetch token scopes for scope-based tool filtering (PAT tokens only)
 	// Only classic PATs (ghp_ prefix) return OAuth scopes via X-OAuth-Scopes header.
@@ -279,8 +289,10 @@ func RunStdioServer(cfg StdioServerConfig) error {
 		EnabledTools:      cfg.EnabledTools,
 		EnabledFeatures:   cfg.EnabledFeatures,
 		ReadOnly:          cfg.ReadOnly,
+		TerseDescriptions: cfg.TerseDescriptions,
 		Translator:        t,
 		ContentWindowSize: cfg.ContentWindowSize,
+		SpillConfig:       cfg.SpillConfig,
 		LockdownMode:      cfg.LockdownMode,
 		InsidersMode:      cfg.InsidersMode,
 		ExcludeTools:      cfg.ExcludeTools,

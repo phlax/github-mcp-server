@@ -10,6 +10,7 @@ import (
 	"github.com/github/github-mcp-server/internal/ghmcp"
 	"github.com/github/github-mcp-server/pkg/github"
 	ghhttp "github.com/github/github-mcp-server/pkg/http"
+	"github.com/github/github-mcp-server/pkg/utils"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
@@ -78,6 +79,12 @@ var (
 			}
 
 			ttl := viper.GetDuration("repo-access-cache-ttl")
+			spillConfig := utils.SpillConfig{
+				Dir:       viper.GetString("spill-dir"),
+				Threshold: viper.GetInt("spill-bytes"),
+				HeadBytes: viper.GetInt("spill-head-bytes"),
+				TailBytes: viper.GetInt("spill-tail-bytes"),
+			}
 			stdioServerConfig := ghmcp.StdioServerConfig{
 				Version:              version,
 				Host:                 viper.GetString("host"),
@@ -86,10 +93,12 @@ var (
 				EnabledTools:         enabledTools,
 				EnabledFeatures:      enabledFeatures,
 				ReadOnly:             viper.GetBool("read-only"),
+				TerseDescriptions:    viper.GetBool("terse-descriptions"),
 				ExportTranslations:   viper.GetBool("export-translations"),
 				EnableCommandLogging: viper.GetBool("enable-command-logging"),
 				LogFilePath:          viper.GetString("log-file"),
 				ContentWindowSize:    viper.GetInt("content-window-size"),
+				SpillConfig:          spillConfig,
 				LockdownMode:         viper.GetBool("lockdown-mode"),
 				InsidersMode:         viper.GetBool("insiders"),
 				ExcludeTools:         excludeTools,
@@ -134,6 +143,12 @@ var (
 			}
 
 			ttl := viper.GetDuration("repo-access-cache-ttl")
+			spillConfig := utils.SpillConfig{
+				Dir:       viper.GetString("spill-dir"),
+				Threshold: viper.GetInt("spill-bytes"),
+				HeadBytes: viper.GetInt("spill-head-bytes"),
+				TailBytes: viper.GetInt("spill-tail-bytes"),
+			}
 			httpConfig := ghhttp.ServerConfig{
 				Version:              version,
 				Host:                 viper.GetString("host"),
@@ -144,10 +159,12 @@ var (
 				EnableCommandLogging: viper.GetBool("enable-command-logging"),
 				LogFilePath:          viper.GetString("log-file"),
 				ContentWindowSize:    viper.GetInt("content-window-size"),
+				SpillConfig:          spillConfig,
 				LockdownMode:         viper.GetBool("lockdown-mode"),
 				RepoAccessCacheTTL:   &ttl,
 				ScopeChallenge:       viper.GetBool("scope-challenge"),
 				ReadOnly:             viper.GetBool("read-only"),
+				TerseDescriptions:    viper.GetBool("terse-descriptions"),
 				EnabledToolsets:      enabledToolsets,
 				EnabledTools:         enabledTools,
 				ExcludeTools:         excludeTools,
@@ -173,6 +190,7 @@ func init() {
 	rootCmd.PersistentFlags().StringSlice("exclude-tools", nil, "Comma-separated list of tool names to disable regardless of other settings")
 	rootCmd.PersistentFlags().StringSlice("features", nil, "Comma-separated list of feature flags to enable")
 	rootCmd.PersistentFlags().Bool("read-only", false, "Restrict the server to read-only operations")
+	rootCmd.PersistentFlags().Bool("terse-descriptions", false, "Replace verbose tool descriptions with one-line synopses. Use the gh_tool_help tool to fetch full docs on demand. Reduces tools/list payload by ~80% for resource-constrained local models.")
 	rootCmd.PersistentFlags().String("log-file", "", "Path to log file")
 	rootCmd.PersistentFlags().Bool("enable-command-logging", false, "When enabled, the server will log all command requests and responses to the log file")
 	rootCmd.PersistentFlags().Bool("export-translations", false, "Save translations to a JSON file")
@@ -181,6 +199,10 @@ func init() {
 	rootCmd.PersistentFlags().Bool("lockdown-mode", false, "Enable lockdown mode")
 	rootCmd.PersistentFlags().Bool("insiders", false, "Enable insiders features")
 	rootCmd.PersistentFlags().Duration("repo-access-cache-ttl", 5*time.Minute, "Override the repo access cache TTL (e.g. 1m, 0s to disable)")
+	rootCmd.PersistentFlags().String("spill-dir", "", "Directory where oversized tool responses are spilled; empty disables spilling")
+	rootCmd.PersistentFlags().Int("spill-bytes", 32768, "Spill tool responses larger than this many bytes")
+	rootCmd.PersistentFlags().Int("spill-head-bytes", 2048, "Include this many bytes from the start of a spilled response in the envelope")
+	rootCmd.PersistentFlags().Int("spill-tail-bytes", 512, "Include this many bytes from the end of a spilled response in the envelope")
 
 	// HTTP-specific flags
 	httpCmd.Flags().Int("port", 8082, "HTTP server port")
@@ -195,6 +217,7 @@ func init() {
 	_ = viper.BindPFlag("exclude_tools", rootCmd.PersistentFlags().Lookup("exclude-tools"))
 	_ = viper.BindPFlag("features", rootCmd.PersistentFlags().Lookup("features"))
 	_ = viper.BindPFlag("read-only", rootCmd.PersistentFlags().Lookup("read-only"))
+	_ = viper.BindPFlag("terse-descriptions", rootCmd.PersistentFlags().Lookup("terse-descriptions"))
 	_ = viper.BindPFlag("log-file", rootCmd.PersistentFlags().Lookup("log-file"))
 	_ = viper.BindPFlag("enable-command-logging", rootCmd.PersistentFlags().Lookup("enable-command-logging"))
 	_ = viper.BindPFlag("export-translations", rootCmd.PersistentFlags().Lookup("export-translations"))
@@ -203,6 +226,10 @@ func init() {
 	_ = viper.BindPFlag("lockdown-mode", rootCmd.PersistentFlags().Lookup("lockdown-mode"))
 	_ = viper.BindPFlag("insiders", rootCmd.PersistentFlags().Lookup("insiders"))
 	_ = viper.BindPFlag("repo-access-cache-ttl", rootCmd.PersistentFlags().Lookup("repo-access-cache-ttl"))
+	_ = viper.BindPFlag("spill-dir", rootCmd.PersistentFlags().Lookup("spill-dir"))
+	_ = viper.BindPFlag("spill-bytes", rootCmd.PersistentFlags().Lookup("spill-bytes"))
+	_ = viper.BindPFlag("spill-head-bytes", rootCmd.PersistentFlags().Lookup("spill-head-bytes"))
+	_ = viper.BindPFlag("spill-tail-bytes", rootCmd.PersistentFlags().Lookup("spill-tail-bytes"))
 	_ = viper.BindPFlag("port", httpCmd.Flags().Lookup("port"))
 	_ = viper.BindPFlag("base-url", httpCmd.Flags().Lookup("base-url"))
 	_ = viper.BindPFlag("base-path", httpCmd.Flags().Lookup("base-path"))

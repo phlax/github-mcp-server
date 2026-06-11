@@ -127,7 +127,7 @@ func NewHTTPMcpHandler(
 
 func (h *Handler) RegisterMiddleware(r chi.Router) {
 	r.Use(
-		middleware.ExtractUserToken(h.oauthCfg),
+		middleware.ExtractUserToken(h.logger, h.oauthCfg),
 		middleware.WithRequestConfig,
 		middleware.WithMCPParse(),
 		middleware.WithPATScopes(h.logger, h.scopeFetcher),
@@ -180,6 +180,16 @@ func withInsiders(next http.Handler) http.Handler {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Log every request that reaches the handler so requests that bypass or
+	// reach here before auth middleware (e.g. due to routing changes) are
+	// still visible in the operator's journal.
+	h.logger.Info("http_request",
+		"method", r.Method,
+		"path", r.URL.Path,
+		"content_length", r.ContentLength,
+		"mcp_session_id_present", r.Header.Get("Mcp-Session-Id") != "",
+	)
+
 	inv, err := h.inventoryFactoryFunc(r)
 	if err != nil {
 		if errors.Is(err, inventory.ErrUnknownTools) {
@@ -201,8 +211,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	ghServer, err := h.githubMcpServerFactory(r, h.deps, invToUse, &github.MCPServerConfig{
 		Version:           h.config.Version,
+		TerseDescriptions: h.config.TerseDescriptions,
 		Translator:        h.t,
 		ContentWindowSize: h.config.ContentWindowSize,
+		SpillConfig:       h.config.SpillConfig,
 		Logger:            h.logger,
 		RepoAccessTTL:     h.config.RepoAccessCacheTTL,
 		// Explicitly set empty capabilities. inv.ForMCPRequest currently returns nothing for Initialize.
@@ -265,6 +277,7 @@ func DefaultInventoryFactory(cfg *ServerConfig, t translations.TranslationHelper
 			SetResources(staticResources).
 			SetPrompts(staticPrompts).
 			WithDeprecatedAliases(github.DeprecatedToolAliases).
+			WithTerseDescriptions(cfg.TerseDescriptions).
 			WithFeatureChecker(featureChecker)
 
 		// When static flags constrain the universe, default to showing
@@ -337,6 +350,7 @@ func buildStaticInventory(cfg *ServerConfig, t translations.TranslationHelperFun
 	}
 
 	b := github.NewInventory(t).
+		WithTerseDescriptions(cfg.TerseDescriptions).
 		WithReadOnly(cfg.ReadOnly).
 		WithToolsets(github.ResolvedEnabledToolsets(cfg.EnabledToolsets, cfg.EnabledTools))
 

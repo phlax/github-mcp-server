@@ -1,6 +1,9 @@
 package middleware
 
 import (
+	"bytes"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,6 +15,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// discardLogger returns a logger that writes to io.Discard, suitable for tests
+// that do not need to assert on log output.
+func discardLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
 
 func TestExtractUserToken(t *testing.T) {
 	oauthCfg := &oauth.Config{
@@ -177,7 +186,7 @@ func TestExtractUserToken(t *testing.T) {
 				w.WriteHeader(http.StatusOK)
 			})
 
-			middleware := ExtractUserToken(oauthCfg)
+			middleware := ExtractUserToken(discardLogger(), oauthCfg)
 			handler := middleware(nextHandler)
 
 			req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -217,7 +226,7 @@ func TestExtractUserToken_NilOAuthConfig(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	middleware := ExtractUserToken(nil)
+	middleware := ExtractUserToken(discardLogger(), nil)
 	handler := middleware(nextHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -243,7 +252,7 @@ func TestExtractUserToken_MissingAuthHeader_WWWAuthenticateFormat(t *testing.T) 
 		w.WriteHeader(http.StatusOK)
 	})
 
-	middleware := ExtractUserToken(oauthCfg)
+	middleware := ExtractUserToken(discardLogger(), oauthCfg)
 	handler := middleware(nextHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -318,4 +327,135 @@ func TestSendAuthChallenge(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRedactToken(t *testing.T) {
+	tests := []struct {
+		name        string
+		token       string
+		want        string
+		notContains string // raw token must not appear when longer than 6 chars
+	}{
+		{
+			name: "empty input returns dash",
+			want: "-",
+		},
+		{
+			name:  "short input less than 6 chars",
+			token: "abc",
+			want:  "abc…",
+		},
+		{
+			name:  "exactly 6 chars",
+			token: "abcdef",
+			want:  "abcdef…",
+		},
+		{
+			name:        "normal ghp_ token",
+			token:       "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+			want:        "ghp_xx…",
+			notContains: "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+		},
+		{
+			name:        "fine-grained PAT",
+			token:       "github_pat_xxxxxxxxxxxxxxxxxxxxxxx",
+			want:        "github…",
+			notContains: "github_pat_xxxxxxxxxxxxxxxxxxxxxxx",
+		},
+		{
+			name:        "old-style 40-hex PAT",
+			token:       "0123456789abcdef0123456789abcdef01234567",
+			want:        "012345…",
+			notContains: "0123456789abcdef0123456789abcdef01234567",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := redactToken(tt.token)
+			assert.Equal(t, tt.want, got)
+			if tt.notContains != "" {
+				assert.NotEqual(t, tt.notContains, got, "redactToken must never return the raw token")
+			}
+		})
+	}
+}
+
+// bufLogger returns a logger that writes to the provided buffer at Info level.
+func bufLogger(buf *bytes.Buffer) *slog.Logger {
+	return slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+}
+
+func TestExtractUserToken_LogOutput_Success(t *testing.T) {
+	oauthCfg := &oauth.Config{
+		BaseURL:             "https://example.com",
+		AuthorizationServer: "https://github.com/login/oauth",
+	}
+
+	const rawToken = "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+	const wantPrefix = "ghp_xx…"
+
+	var buf bytes.Buffer
+	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	handler := ExtractUserToken(bufLogger(&buf), oauthCfg)(nextHandler)
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	req.Header.Set(headers.AuthorizationHeader, "Bearer "+rawToken)
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	logged := buf.String()
+	assert.Contains(t, logged, "token_type=")
+	assert.Contains(t, logged, wantPrefix)
+	assert.NotContains(t, logged, rawToken, "raw token must not appear in log output")
+}
+
+func TestExtractUserToken_LogOutput_MissingAuth(t *testing.T) {
+	oauthCfg := &oauth.Config{
+		BaseURL:             "https://api.example.com",
+		AuthorizationServer: "https://github.com/login/oauth",
+		ResourcePath:        "/mcp",
+	}
+
+	var buf bytes.Buffer
+	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	handler := ExtractUserToken(bufLogger(&buf), oauthCfg)(nextHandler)
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	// No Authorization header
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	logged := buf.String()
+	assert.Contains(t, logged, "missing Authorization header")
+	assert.Contains(t, logged, "resource_metadata_url=")
+	assert.Contains(t, logged, "/.well-known/oauth-protected-resource")
+}
+
+func TestExtractUserToken_LogOutput_MalformedAuth(t *testing.T) {
+	oauthCfg := &oauth.Config{
+		BaseURL:             "https://example.com",
+		AuthorizationServer: "https://github.com/login/oauth",
+	}
+
+	var buf bytes.Buffer
+	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	handler := ExtractUserToken(bufLogger(&buf), oauthCfg)(nextHandler)
+
+	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	req.Header.Set(headers.AuthorizationHeader, "******")
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	logged := buf.String()
+	assert.Contains(t, logged, "malformed Authorization header")
+	assert.Contains(t, logged, "error=")
 }

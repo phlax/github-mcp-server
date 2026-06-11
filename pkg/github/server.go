@@ -47,6 +47,11 @@ type MCPServerConfig struct {
 	// Content window size
 	ContentWindowSize int
 
+	// SpillConfig controls optional spilling of oversized tool results to disk.
+	// This config is applied process-globally via utils.SetSpillConfig during
+	// server startup; per-request overrides are not supported.
+	SpillConfig utils.SpillConfig
+
 	// LockdownMode indicates if we should enable lockdown mode
 	LockdownMode bool
 
@@ -67,6 +72,9 @@ type MCPServerConfig struct {
 	// When non-nil, tools requiring scopes not in this list will be hidden.
 	// This is used for PAT scope filtering where we can't issue scope challenges.
 	TokenScopes []string
+
+	// TerseDescriptions shortens tool descriptions in tools/list responses.
+	TerseDescriptions bool
 
 	// Additional server options to apply
 	ServerOptions []MCPServerOption
@@ -91,7 +99,12 @@ func NewMCPServer(ctx context.Context, cfg *MCPServerConfig, deps ToolDependenci
 
 	// Add middlewares. Order matters - for example, the error context middleware should be applied last so that it runs FIRST (closest to the handler) to ensure all errors are captured,
 	// and any middleware that needs to read or modify the context should be before it.
+	ghServer.AddReceivingMiddleware(SpillToolNameMiddleware)
 	ghServer.AddReceivingMiddleware(middleware...)
+	// Inject inventory and dependencies for tool handlers.
+	// Middleware executes in reverse registration order, so handlers see this
+	// context before executing.
+	ghServer.AddReceivingMiddleware(InjectInventoryMiddleware(inv))
 	ghServer.AddReceivingMiddleware(InjectDepsMiddleware(deps))
 	ghServer.AddReceivingMiddleware(addGitHubAPIErrorToContext)
 

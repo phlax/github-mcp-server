@@ -63,6 +63,11 @@ type ServerConfig struct {
 	// Content window size
 	ContentWindowSize int
 
+	// SpillConfig controls optional spilling of oversized tool results to disk.
+	// This config is applied process-globally via utils.SetSpillConfig during
+	// server startup; per-request overrides are not supported.
+	SpillConfig utils.SpillConfig
+
 	// LockdownMode indicates if we should enable lockdown mode
 	LockdownMode bool
 
@@ -77,6 +82,9 @@ type ServerConfig struct {
 	// When set via CLI flag, this acts as an upper bound — per-request headers
 	// cannot re-enable write tools.
 	ReadOnly bool
+
+	// TerseDescriptions indicates if tool descriptions should be shortened.
+	TerseDescriptions bool
 
 	// EnabledToolsets is a list of toolsets to enable.
 	// When set via CLI flag, per-request headers can only narrow within these toolsets.
@@ -118,6 +126,7 @@ func RunHTTPServer(cfg ServerConfig) error {
 	}
 	logger := slog.New(slogHandler)
 	logger.Info("starting server", "version", cfg.Version, "host", cfg.Host, "lockdownEnabled", cfg.LockdownMode, "readOnly", cfg.ReadOnly, "insidersMode", cfg.InsidersMode)
+	utils.SetSpillConfig(cfg.SpillConfig)
 
 	apiHost, err := utils.NewAPIHost(cfg.Host)
 	if err != nil {
@@ -185,6 +194,7 @@ func RunHTTPServer(cfg ServerConfig) error {
 		handler.RegisterRoutes(r)
 	})
 	logger.Info("MCP endpoints registered", "baseURL", cfg.BaseURL)
+	logger.Info("HTTP middleware logging enabled at INFO level — auth seam decisions will be visible")
 
 	r.Group(func(r chi.Router) {
 		// Register OAuth protected resource metadata endpoints

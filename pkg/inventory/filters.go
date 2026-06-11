@@ -13,6 +13,9 @@ import (
 // Returns (enabled, error). If error occurs, the caller should log and treat as false.
 type FeatureFlagChecker func(ctx context.Context, flagName string) (bool, error)
 
+// AlwaysEnabledToolsetID bypasses explicit toolset filtering.
+const AlwaysEnabledToolsetID ToolsetID = "meta"
+
 // isToolsetEnabled checks if a toolset is enabled based on current filters.
 func (r *Inventory) isToolsetEnabled(toolsetID ToolsetID) bool {
 	// Check enabled toolsets filter
@@ -111,6 +114,10 @@ func (r *Inventory) isToolEnabled(ctx context.Context, tool *ServerTool) bool {
 	}
 	// 4. Check if tool is in additionalTools (bypasses toolset filter)
 	if r.additionalTools != nil && r.additionalTools[tool.Tool.Name] {
+		return true
+	}
+	// 4.5. Meta tools are always available regardless of --toolsets filtering.
+	if tool.Toolset.ID == AlwaysEnabledToolsetID {
 		return true
 	}
 	// 4. Check toolset filter

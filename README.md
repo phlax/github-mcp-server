@@ -457,6 +457,55 @@ You can also configure specific tools using the `--tools` flag. Tools can be use
 - Tool names must match exactly (e.g., `get_file_contents`, not `getFileContents`). Invalid tool names will cause the server to fail at startup with an error message
 - When tools are renamed, old names are preserved as aliases for backward compatibility. See [Tool Renaming](docs/tool-renaming.md) for details.
 
+### Reducing tool description size for small models
+
+When running smaller local models, you can reduce `tools/list` payload size with:
+
+```bash
+./github-mcp-server stdio --terse-descriptions
+```
+
+or:
+
+```bash
+GITHUB_TERSE_DESCRIPTIONS=true ./github-mcp-server stdio
+```
+
+With terse descriptions enabled, tool descriptions are shortened to one-line synopses. Use the built-in `gh_tool_help` tool to fetch full verbose docs and parameter descriptions on demand for a specific tool.
+
+This progressive-disclosure approach helps reduce prompt bloat for resource-constrained models, as discussed in:
+
+- RAG-MCP (arXiv:2505.03275)
+- Anthropic's "Code execution with MCP" engineering post
+
+### Spilling oversized tool results to a shared directory
+
+When an agent runs inside a sandbox or container, downstream tooling may spill oversized tool responses to a host-only temporary directory that the agent cannot read. To avoid that, you can opt in to server-side spilling and point the server at a directory that is deliberately shared with the agent.
+
+```bash
+./github-mcp-server stdio --spill-dir /workspace/tmp
+```
+
+For local dev outside a sandbox, prefer a tmpfs that's tied to your session:
+
+```bash
+./github-mcp-server stdio --spill-dir "${XDG_RUNTIME_DIR:-/tmp}/github-mcp-spill"
+```
+
+> **Note:** spilling is only useful when the directory you point us at is reachable by the agent that will read the envelope. In a containerized / sandboxed setup, pick a path that's bind-mounted into the agent's filesystem; on a single host, any writable path that both processes can see is fine.
+
+or:
+
+```bash
+GITHUB_SPILL_DIR=/workspace/tmp \
+GITHUB_SPILL_BYTES=32768 \
+GITHUB_SPILL_HEAD_BYTES=2048 \
+GITHUB_SPILL_TAIL_BYTES=512 \
+./github-mcp-server stdio
+```
+
+When enabled, responses larger than `spill-bytes` are written to the configured directory and the tool returns a small JSON envelope with the absolute `path`, response `bytes`, `mime_hint`, preview `head` and `tail`, and a `hint` telling the agent to read the file with filesystem tools.
+
 ### Using Toolsets With Docker
 
 When using Docker, you can pass the toolsets as environment variables:
