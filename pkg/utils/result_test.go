@@ -13,17 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type testSpillEnvelope struct {
-	Spilled  bool   `json:"spilled"`
-	Tool     string `json:"tool"`
-	Path     string `json:"path"`
-	Bytes    int    `json:"bytes"`
-	MIMEHint string `json:"mime_hint"`
-	Head     string `json:"head"`
-	Tail     string `json:"tail"`
-	Hint     string `json:"hint"`
-}
-
 func TestNewToolResultTextPassThroughUnderThreshold(t *testing.T) {
 	spillDir := t.TempDir()
 	SetSpillConfig(SpillConfig{
@@ -67,6 +56,8 @@ func TestNewToolResultTextSpillsOversizedResponse(t *testing.T) {
 	SetSpillConfig(SpillConfig{
 		Dir:       spillDir,
 		Threshold: 12,
+		// Intentionally split multi-byte emoji boundaries to verify head/tail previews
+		// are repaired into valid UTF-8 with strings.ToValidUTF8.
 		HeadBytes: 13,
 		TailBytes: 11,
 	})
@@ -76,19 +67,19 @@ func TestNewToolResultTextSpillsOversizedResponse(t *testing.T) {
 	text := getTextResult(t, result)
 	envelope := decodeSpillEnvelope(t, text.Text)
 
-	assert.True(t, envelope.Spilled)
-	assert.Equal(t, "tool-result", envelope.Tool)
-	assert.Equal(t, len(body), envelope.Bytes)
-	assert.Equal(t, "application/json", envelope.MIMEHint)
-	assert.Equal(t, strings.ToValidUTF8(string(body[:13]), ""), envelope.Head)
-	assert.Equal(t, strings.ToValidUTF8(string(body[len(body)-11:]), ""), envelope.Tail)
-	assert.True(t, utf8.ValidString(envelope.Head))
-	assert.True(t, utf8.ValidString(envelope.Tail))
-	assert.Contains(t, envelope.Hint, envelope.Path)
-	assert.True(t, filepath.IsAbs(envelope.Path))
-	assert.Equal(t, ".json", filepath.Ext(envelope.Path))
+	assert.True(t, envelope.bool(t, "spilled"))
+	assert.Equal(t, "tool-result", envelope.string(t, "tool"))
+	assert.Equal(t, len(body), envelope.int(t, "bytes"))
+	assert.Equal(t, "application/json", envelope.string(t, "mime_hint"))
+	assert.Equal(t, strings.ToValidUTF8(string(body[:13]), ""), envelope.string(t, "head"))
+	assert.Equal(t, strings.ToValidUTF8(string(body[len(body)-11:]), ""), envelope.string(t, "tail"))
+	assert.True(t, utf8.ValidString(envelope.string(t, "head")))
+	assert.True(t, utf8.ValidString(envelope.string(t, "tail")))
+	assert.Contains(t, envelope.string(t, "hint"), envelope.string(t, "path"))
+	assert.True(t, filepath.IsAbs(envelope.string(t, "path")))
+	assert.Equal(t, ".json", filepath.Ext(envelope.string(t, "path")))
 
-	spilledBody, err := os.ReadFile(envelope.Path)
+	spilledBody, err := os.ReadFile(envelope.string(t, "path"))
 	require.NoError(t, err)
 	assert.Equal(t, message, string(spilledBody))
 
@@ -96,7 +87,7 @@ func TestNewToolResultTextSpillsOversizedResponse(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o755), dirInfo.Mode().Perm())
 
-	fileInfo, err := os.Stat(envelope.Path)
+	fileInfo, err := os.Stat(envelope.string(t, "path"))
 	require.NoError(t, err)
 	assert.Equal(t, os.FileMode(0o644), fileInfo.Mode().Perm())
 }
@@ -113,7 +104,7 @@ func TestNewToolResultTextSpillFilenameIsUnique(t *testing.T) {
 	first := decodeSpillEnvelope(t, getTextResult(t, NewToolResultText("first spill")).Text)
 	second := decodeSpillEnvelope(t, getTextResult(t, NewToolResultText("second spill")).Text)
 
-	assert.NotEqual(t, first.Path, second.Path)
+	assert.NotEqual(t, first.string(t, "path"), second.string(t, "path"))
 }
 
 func getTextResult(t *testing.T, result *mcp.CallToolResult) *mcp.TextContent {
@@ -127,11 +118,34 @@ func getTextResult(t *testing.T, result *mcp.CallToolResult) *mcp.TextContent {
 	return text
 }
 
-func decodeSpillEnvelope(t *testing.T, text string) testSpillEnvelope {
+type decodedEnvelope map[string]any
+
+func decodeSpillEnvelope(t *testing.T, text string) decodedEnvelope {
 	t.Helper()
 
-	var envelope testSpillEnvelope
+	var envelope decodedEnvelope
 	require.NoError(t, json.Unmarshal([]byte(text), &envelope))
 
 	return envelope
+}
+
+func (e decodedEnvelope) bool(t *testing.T, key string) bool {
+	t.Helper()
+	value, ok := e[key].(bool)
+	require.Truef(t, ok, "expected %q to be a bool, got %T", key, e[key])
+	return value
+}
+
+func (e decodedEnvelope) string(t *testing.T, key string) string {
+	t.Helper()
+	value, ok := e[key].(string)
+	require.Truef(t, ok, "expected %q to be a string, got %T", key, e[key])
+	return value
+}
+
+func (e decodedEnvelope) int(t *testing.T, key string) int {
+	t.Helper()
+	value, ok := e[key].(float64)
+	require.Truef(t, ok, "expected %q to be a number, got %T", key, e[key])
+	return int(value)
 }

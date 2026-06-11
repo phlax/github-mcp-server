@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -46,6 +47,7 @@ var (
 )
 
 // SetSpillConfig updates the process-global oversized response spill configuration.
+// It is intended to be called during server startup before requests are served; reads are safe after initialization.
 func SetSpillConfig(cfg SpillConfig) {
 	spillConfigMu.Lock()
 	defer spillConfigMu.Unlock()
@@ -104,7 +106,6 @@ func spillToolResult(message string, meta ResultMeta, cfg SpillConfig) (*mcp.Cal
 	}
 
 	body := []byte(message)
-	toolName := spillToolName(meta.Tool)
 	mimeHint := meta.MIMEHint
 	ext := ".txt"
 	if json.Valid(body) {
@@ -113,8 +114,12 @@ func spillToolResult(message string, meta ResultMeta, cfg SpillConfig) (*mcp.Cal
 	} else if mimeHint == "" {
 		mimeHint = "text/plain"
 	}
+	toolName := meta.Tool
+	if toolName == "" {
+		toolName = "tool-result"
+	}
 
-	filename, err := spillFilename(toolName, ext)
+	filename, err := generateSpillFilename(toolName, ext)
 	if err != nil {
 		return nil, fmt.Errorf("generate spill filename: %w", err)
 	}
@@ -142,7 +147,9 @@ func spillToolResult(message string, meta ResultMeta, cfg SpillConfig) (*mcp.Cal
 	return newInlineToolResultText(string(envelopeBody)), nil
 }
 
-func spillFilename(tool, ext string) (string, error) {
+func generateSpillFilename(tool, ext string) (string, error) {
+	// Four random bytes are sufficient here because the filename also carries
+	// the tool name and millisecond timestamp, keeping collision risk negligible.
 	var suffix [4]byte
 	if _, err := rand.Read(suffix[:]); err != nil {
 		return "", err
@@ -151,34 +158,19 @@ func spillFilename(tool, ext string) (string, error) {
 	return fmt.Sprintf("%s-%d-%s%s", sanitizeSpillToolName(tool), time.Now().UnixMilli(), hex.EncodeToString(suffix[:]), ext), nil
 }
 
-func spillToolName(tool string) string {
-	if tool == "" {
-		return "tool-result"
-	}
-
-	return tool
-}
-
 func sanitizeSpillToolName(tool string) string {
 	if tool == "" {
 		return "tool-result"
 	}
 
 	safe := strings.Map(func(r rune) rune {
-		switch {
-		case r >= 'a' && r <= 'z':
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_' {
 			return r
-		case r >= 'A' && r <= 'Z':
-			return r
-		case r >= '0' && r <= '9':
-			return r
-		case r == '-' || r == '_':
-			return r
-		default:
-			return '-'
 		}
+
+		return '-'
 	}, tool)
-	if safe == "" {
+	if safe == "" || strings.Trim(safe, "-_") == "" {
 		return "tool-result"
 	}
 
